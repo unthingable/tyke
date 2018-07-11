@@ -3,7 +3,7 @@ package tyke
 import cats.effect.IO
 import org.http4s.client.dsl.Http4sClientDsl
 import org.http4s.dsl.Http4sDsl
-import org.http4s.{Cookie, HttpService, Status, Uri, headers}
+import org.http4s.{headers, Cookie, HttpService, Status, Uri}
 import org.junit.runner.RunWith
 import org.specs2.runner.JUnitRunner
 
@@ -23,7 +23,7 @@ class HelperSpec extends org.specs2.mutable.Specification with Http4sClientDsl[I
       val cookies: Option[headers.Cookie] = headers.Cookie.from(req.headers)
       cookies.flatMap(_.values.find(_.name == testCookie.name)) match {
         case Some(c) => Ok()
-        case None => BadRequest()
+        case None    => BadRequest()
       }
   }
 

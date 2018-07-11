@@ -13,8 +13,7 @@ import scala.concurrent.duration._
 import scala.language.{higherKinds, postfixOps}
 
 object Dummy {
-  case class DummyUserStore[F[_]]()(implicit F: Sync[F])
-      extends UserStore[F, User] {
+  case class DummyUserStore[F[_]]()(implicit F: Sync[F]) extends UserStore[F, User] {
     val storageMap = mutable.HashMap.empty[String, UserAndPassword]
 
     def get(id: String): OptionT[F, User] =
@@ -35,19 +34,21 @@ object Dummy {
   def dummySessionStore[F[_], U, S](
     mkSession: String => S,
     timeout: Duration = 1000 hours,
-    now: => Instant = Instant.now()  // virtualizeable time for testing
+    now: => Instant = Instant.now() // virtualizeable time for testing
   )(implicit F: Monad[F]): BackingSessionStore[F, U, S] =
     new BackingSessionStore[F, U, S] {
       private val userSessionMap = new mutable.HashMap[U, mutable.Set[S]] with mutable.MultiMap[U, S]
       private val sessionUserMap = mutable.HashMap.empty[S, U]
-      private val timeMap = mutable.HashMap.empty[S, Instant]
+      private val timeMap        = mutable.HashMap.empty[S, Instant]
 
       def endAllSessions(user: U): F[Unit] = {
         // remove from both maps
-        userSessionMap.remove(user).map(_.map(session => {
-          sessionUserMap.remove(session)
-          timeMap.remove(session)
-        }))
+        userSessionMap
+          .remove(user)
+          .map(_.map(session => {
+            sessionUserMap.remove(session)
+            timeMap.remove(session)
+          }))
         F.unit
       }
 
@@ -83,11 +84,10 @@ object Dummy {
           ns <- OptionT.liftF[F, S](newSession(user))
         } yield ns
       // Should this be a raised error instead of None?
-      */
+       */
 
-      private def isValid: S => Boolean = {
+      private def isValid: S => Boolean =
         timeMap.get(_).exists(_.plusNanos(timeout.toNanos).isAfter(now))
-      }
 
       def userSessions(user: U): OptionT[F, Set[S]] =
         OptionT.fromOption[F](userSessionMap.get(user).map(_.toSet))

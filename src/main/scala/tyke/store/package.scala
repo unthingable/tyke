@@ -35,20 +35,25 @@ package object store {
 
   type SessionStore[F[_]] = BackingSessionStore[F, User, UserSession]
 
-  case class MultiStore[F[_], U <: User](stores: NonEmptyList[UserStore[F, U]])
-    (implicit F: Sync[F])
-    extends UserStore[F, U] {
+  case class MultiStore[F[_], U <: User](stores: NonEmptyList[UserStore[F, U]])(implicit F: Sync[F])
+      extends UserStore[F, U] {
     private def withF(f: UserStore[F, U] => OptionT[F, U]): OptionT[F, U] =
       // Attempt a method on each store, stopping after the first success
       OptionT(
-        stores.map(f(_).value)
-        .map(Stream.eval)
-        .combineAll
-        .collectFirst{case Some(x) => x}.compile.toVector.map(_.headOption))
+        stores
+          .map(f(_).value)
+          .map(Stream.eval)
+          .combineAll
+          .collectFirst { case Some(x) => x }
+          .compile
+          .toVector
+          .map(_.headOption)
+      )
 
     def get(id: String): OptionT[F, U] = withF(_.get(id))
 
-    def getWithPassword(id: String, password: Password[Source.Entered]): OptionT[F, U] = withF(_.getWithPassword(id, password))
+    def getWithPassword(id: String, password: Password[Source.Entered]): OptionT[F, U] =
+      withF(_.getWithPassword(id, password))
   }
 
   trait BackingSessionStore[F[_], U, S] {
@@ -79,35 +84,36 @@ package object store {
     * Create store instances as defined in Config.
     * Opinionated first pass, to be generalized.
     */
-  def storesFromConfig(conf: BackendConfig):
-    IO[BackendStores[IO]] = {
+  def storesFromConfig(conf: BackendConfig): IO[BackendStores[IO]] =
     for {
-      userStoreType <- IO(conf.backendUser.map(conf.backends)) // fail if not found
+      userStoreType    <- IO(conf.backendUser.map(conf.backends)) // fail if not found
       sessionStoreType <- IO(conf.backends(conf.backendSession)) // fail if not found
-      _ <- IO(logger.info(s"User backend: ${conf.backendUser}"))
-      _ <- IO(logger.info(s"Session backend: ${conf.backendSession}"))
-      userStore <- userStoreFromType(userStoreType)
-      sessionStore <- sessionStoreFromType(sessionStoreType, conf.sessionTimeout.seconds)
+      _                <- IO(logger.info(s"User backend: ${conf.backendUser}"))
+      _                <- IO(logger.info(s"Session backend: ${conf.backendSession}"))
+      userStore        <- userStoreFromType(userStoreType)
+      sessionStore     <- sessionStoreFromType(sessionStoreType, conf.sessionTimeout.seconds)
     } yield BackendStores(userStore, sessionStore)
-  }
 
-  def userStoreFromType(t: NonEmptyList[BackendType]): IO[UserStore[IO, User]] = t.map {
-    case b: DummyBackend =>
-      val store = Dummy.DummyUserStore[IO]()
-      b.users match {
-        case Some(users) =>
-          users.map(store.put)
-          logger.debug(s"Added ${users.size} users to dummy backend store")
-        case None        =>
+  def userStoreFromType(t: NonEmptyList[BackendType]): IO[UserStore[IO, User]] =
+    t.map {
+        case b: DummyBackend =>
+          val store = Dummy.DummyUserStore[IO]()
+          b.users match {
+            case Some(users) =>
+              users.map(store.put)
+              logger.debug(s"Added ${users.size} users to dummy backend store")
+            case None =>
+          }
+          IO(store)
+        case b: MysqlDjango =>
+          for {
+            transactor <- MySQLDjango.transactor(b)
+          } yield MySQLDjango.djangoBackingStore(transactor)
+        case b: LdapBackend  => IO(LDAP.ldapBackingStore(b))
+        case _: RedisBackend => IO.raiseError(new InstantiationException("not implemented"))
       }
-      IO(store)
-    case b: MysqlDjango  =>
-      for {
-        transactor <- MySQLDjango.transactor(b)
-      } yield MySQLDjango.djangoBackingStore(transactor)
-    case b: LdapBackend  => IO(LDAP.ldapBackingStore(b))
-    case _: RedisBackend => IO.raiseError(new InstantiationException("not implemented"))
-  }.sequence[IO, UserStore[IO, User]].map(MultiStore[IO, User])
+      .sequence[IO, UserStore[IO, User]]
+      .map(MultiStore[IO, User])
 
   def sessionStoreFromType(t: BackendType, timeout: FiniteDuration): IO[SessionStore[IO]] = t match {
     case _: DummyBackend => IO(Dummy.dummySessionStore(UserSession, timeout = timeout))

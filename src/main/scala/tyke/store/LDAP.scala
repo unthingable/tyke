@@ -21,25 +21,29 @@ object LDAP {
             case None    => IO.pure(Unit)
             case Some(p) => validateForLdap(result.getNameInNamespace, p.value)
           }
-        } yield Some(User(
-          username = result.getAttributes.get("sAMAccountName").get.asInstanceOf[String],
-          role = Role.StaffUser,
-          groups = userGroups(result)))  // everyone in LDAP is a staffer right now, refine as needed
+        } yield Some(
+          User(
+            username = result.getAttributes.get("sAMAccountName").get.asInstanceOf[String],
+            role = Role.StaffUser,
+            groups = userGroups(result)
+          )
+        ) // everyone in LDAP is a staffer right now, refine as needed
       )
 
     /**
       * Return CN groups, if any
       */
     private def userGroups(searchResult: SearchResult): Seq[String] = {
+
       /**
         * Attempt to find a CN in the "memberOf" string
         */
       def getName(cn: String): Option[String] = {
-         val regex = """^CN=([\w\s\d]*),.*$""".r
-         cn match {
-            case regex(name) => Some(name)
-            case _ => None
-         }
+        val regex = """^CN=([\w\s\d]*),.*$""".r
+        cn match {
+          case regex(name) => Some(name)
+          case _           => None
+        }
       }
 
       val groups = searchResult.getAttributes.get("memberOf").getAll.asScala
@@ -64,7 +68,8 @@ object LDAP {
         controls.setReturningAttributes(Array[String]("givenName", "sn", "memberOf", "cn", "sAMAccountName"))
         controls.setSearchScope(SearchControls.SUBTREE_SCOPE)
 
-        val answers: NamingEnumeration[SearchResult] = context.search("dc=mydomain,dc=net", s"sAMAccountName=$username", controls)
+        val answers: NamingEnumeration[SearchResult] =
+          context.search("dc=mydomain,dc=net", s"sAMAccountName=$username", controls)
         val result: SearchResult = answers.nextElement
 
 //        val user: String = result.getNameInNamespace
@@ -72,12 +77,12 @@ object LDAP {
       }
 
     def validateForLdap(user: String, password: String): IO[Unit] = IO {
-        val props = new Properties
-        props.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory")
-        props.put(Context.PROVIDER_URL, conf.providerUrl)
-        props.put(Context.SECURITY_PRINCIPAL, user)
-        props.put(Context.SECURITY_CREDENTIALS, password)
-        val context = new InitialDirContext(props)
-      }
+      val props = new Properties
+      props.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory")
+      props.put(Context.PROVIDER_URL, conf.providerUrl)
+      props.put(Context.SECURITY_PRINCIPAL, user)
+      props.put(Context.SECURITY_CREDENTIALS, password)
+      val context = new InitialDirContext(props)
+    }
   }
 }

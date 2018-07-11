@@ -2,7 +2,7 @@ package tyke
 
 import cats.data.NonEmptyList
 import tyke.store.UserTypes.UserAndPassword
-import pureconfig.module.cats._  // needed for NonEmptyList
+import pureconfig.module.cats._ // needed for NonEmptyList
 
 package object config {
 
@@ -33,19 +33,19 @@ package object config {
 
   // default values provided for ease of testing
   case class ServerConfig(
-    port           : Int,
-    host           : String,
-    cookieName     : String,
-    cookiePath     : Option[String],
-    userinfoHeader : String,
-    secret         : String,
+    port: Int,
+    host: String,
+    cookieName: String,
+    cookiePath: Option[String],
+    userinfoHeader: String,
+    secret: String
   )
 
   case class BackendConfig(
-    backendUser    : NonEmptyList[String],
-    backendSession : String,
-    backends       : Map[String, BackendType],
-    sessionTimeout : Int  // seconds
+    backendUser: NonEmptyList[String],
+    backendSession: String,
+    backends: Map[String, BackendType],
+    sessionTimeout: Int // seconds
   )
 
   case class Config(server: ServerConfig, backend: BackendConfig)

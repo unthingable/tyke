@@ -8,6 +8,7 @@ buildscript {
 plugins {
     id 'scala'
     id 'application'
+    id 'com.diffplug.gradle.spotless' version '3.26.1'
 }
 
 apply plugin: 'com.bmuschko.docker-java-application'
@@ -72,6 +73,16 @@ dependencies {
 
 compileScala {
     scalaCompileOptions.additionalParameters = ["-Ypartial-unification"]
+}
+
+spotless {
+    scala {
+        scalafmt().configFile("$rootDir/.scalafmt.conf")
+    }
+}
+
+project.afterEvaluate {
+    compileScala.dependsOn("spotlessScalaApply")
 }
 
 tasks.withType(ScalaCompile) {

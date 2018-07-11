@@ -21,19 +21,15 @@ object UserTypes {
   sealed trait Source
   object Source {
     sealed trait Entered extends Source
-    sealed trait Stored extends Source
+    sealed trait Stored  extends Source
   }
   case class Password[Source](value: String) extends AnyVal
 
-  case class UserCredentials(
-    username: String,
-    password: String)
+  case class UserCredentials(username: String, password: String)
 
   case class User(username: String, role: Role, groups: Seq[String] = Seq())
 
-  case class UserAndPassword(
-    user: User,
-    password: Password[Source.Stored])
+  case class UserAndPassword(user: User, password: Password[Source.Stored])
 
   case class JustUsername(username: String) extends AnyVal
 

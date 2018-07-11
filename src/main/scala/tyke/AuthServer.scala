@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory
 
 import scala.language.higherKinds
 
-
 object AuthServer extends Http4sDsl[IO] {
   import tyke.store.UserTypes._
   import store._
@@ -54,7 +53,7 @@ object AuthServer extends Http4sDsl[IO] {
     )
 
     trait ServiceMaker {
-      val conf   : ServerConfig
+      val conf: ServerConfig
       val service: HttpService[IO]
     }
   }
@@ -74,12 +73,11 @@ object AuthServer extends Http4sDsl[IO] {
       cookies.flatMap(_.values.find(_.name == cookieName))
     }
 
-    private def withAuthCookieF(cookieName: String, f: Cookie => IO[Response[IO]])(req: Request[IO]) = {
+    private def withAuthCookieF(cookieName: String, f: Cookie => IO[Response[IO]])(req: Request[IO]) =
       withCookie(cookieName, req) match {
         case Some(c) => f(c)
         case None    => Forbidden("missing authorization")
       }
-    }
 
     private def withAuthCookie(cookieName: String, f: => IO[Response[IO]]) = withAuthCookieF(cookieName, _ => f) _
 
@@ -88,7 +86,6 @@ object AuthServer extends Http4sDsl[IO] {
         user <- req.as[UserCredentials]
         resp <- Ok(s"HELLO {user.username}").map(_.addCookie(conf.cookieName, user.username))
       } yield resp
-
 
     private def sessionInfo(req: Request[IO]) =
       withAuthCookie(conf.cookieName, Ok("go on"))(req)
@@ -102,9 +99,9 @@ object AuthServer extends Http4sDsl[IO] {
   }
 
   class AuthWithStore(
-    val userStore       : BackingUserStore[IO, String, User]         = Dummy.DummyUserStore(),
-    val sessionStore    : BackingSessionStore[IO, User, UserSession] = Dummy.dummySessionStore(UserSession),
-    override val conf   : ServerConfig
+    val userStore: BackingUserStore[IO, String, User] = Dummy.DummyUserStore(),
+    val sessionStore: BackingSessionStore[IO, User, UserSession] = Dummy.dummySessionStore(UserSession),
+    override val conf: ServerConfig
   ) extends NaiveAuth(conf = conf) {
     import OptionT.{liftF => lo}
     import Middleware._
@@ -127,28 +124,27 @@ object AuthServer extends Http4sDsl[IO] {
 
     override val service: HttpService[IO] =
       loginService <+>
-        authMiddleware(
-          authResponseMiddleware(
-            authedService <+> adminMiddleware(adminService)))
+      authMiddleware(authResponseMiddleware(authedService <+> adminMiddleware(adminService)))
 
     private val crypto = CryptoBits(PrivateKey(scala.io.Codec.toUTF8(conf.secret)))
 
     private object Middleware {
 
-      def authUser: Kleisli[IO, Request[IO], Either[String, Context]] = Kleisli({ request =>
-        val sessionToken: Either[String, UserSession] = for {
-          header <- headers.Cookie.from(request.headers).toRight("Cookie parsing error")
-          cookie <- header.values.toList.find(_.name == conf.cookieName).toRight("Couldn't find the authcookie")
-          token <- crypto.validateSignedToken(cookie.content).toRight("Cookie invalid")
-        } yield UserSession(token)
-        val context: EitherT[IO, String, Context] = for {
-          token <- EitherT.fromEither[IO](sessionToken)
-          user <- sessionStore.sessionUser(token).toRight("Invalid session")
-          newSession <- sessionStore.validateSession(token).toRight("Invalid session")
-          timestamp <- sessionStore.sessionTimestamp(token).toRight("Missing session timestamp?")
-        } yield Context(user, newSession, timestamp)
-        context.value
-      })
+      def authUser: Kleisli[IO, Request[IO], Either[String, Context]] =
+        Kleisli({ request =>
+          val sessionToken: Either[String, UserSession] = for {
+            header <- headers.Cookie.from(request.headers).toRight("Cookie parsing error")
+            cookie <- header.values.toList.find(_.name == conf.cookieName).toRight("Couldn't find the authcookie")
+            token  <- crypto.validateSignedToken(cookie.content).toRight("Cookie invalid")
+          } yield UserSession(token)
+          val context: EitherT[IO, String, Context] = for {
+            token      <- EitherT.fromEither[IO](sessionToken)
+            user       <- sessionStore.sessionUser(token).toRight("Invalid session")
+            newSession <- sessionStore.validateSession(token).toRight("Invalid session")
+            timestamp  <- sessionStore.sessionTimestamp(token).toRight("Missing session timestamp?")
+          } yield Context(user, newSession, timestamp)
+          context.value
+        })
 
       // maybe TODO: use proper response codes for authZ/authN (irrelevant since nginx doesn't care)
       val onFailure: AuthedService[String, IO] = Kleisli(req => OptionT.liftF(Forbidden(req.authInfo)))
@@ -159,10 +155,12 @@ object AuthServer extends Http4sDsl[IO] {
       def authResponseMiddleware(service: AuthedService[Context, IO]): AuthedService[Context, IO] =
         Kleisli { request =>
           service(request).map(
-            Function.chain[Response[IO]](Seq(
-              // forceSessionCookie(request.authInfo),
-              userInfoHeader(request.authInfo)
-            ))
+            Function.chain[Response[IO]](
+              Seq(
+                // forceSessionCookie(request.authInfo),
+                userInfoHeader(request.authInfo)
+              )
+            )
           )
         }
 
@@ -194,7 +192,8 @@ object AuthServer extends Http4sDsl[IO] {
       Cookie(
         name = conf.cookieName,
         content = crypto.signToken(session.session, java.time.Clock.systemUTC.millis.toString),
-        path = conf.cookiePath)
+        path = conf.cookiePath
+      )
 
     private def userInfoFromContext(ctx: Context): String =
       s"${ctx.user.username}:${ctx.user.role.entryName}:${ctx.user.groups.mkString(",")}"
@@ -203,20 +202,19 @@ object AuthServer extends Http4sDsl[IO] {
       for {
         session <- sessionStore.newSession(user)
         resp    <- Ok(s"HELLO ${user.username}").map(_.addCookie(cookieFromSession(session)))
-        _ <- IO(logger.debug(s"Logging in: ${user.username} with ${session.session}"))
+        _       <- IO(logger.debug(s"Logging in: ${user.username} with ${session.session}"))
       } yield resp
 
     def login(req: Request[IO]): IO[Response[IO]] =
-      (
-        for {
-          incoming <- lo(req.as[UserCredentials])
-          user  <- userStore.getWithPassword(incoming.username, Password[Source.Entered](incoming.password))
-          resp  <- lo(doLogin(user))
-          _ <- OptionT.pure[IO](logger.debug(s"Logged in: ${user.username}"))
-        } yield resp)
+      (for {
+        incoming <- lo(req.as[UserCredentials])
+        user     <- userStore.getWithPassword(incoming.username, Password[Source.Entered](incoming.password))
+        resp     <- lo(doLogin(user))
+        _        <- OptionT.pure[IO](logger.debug(s"Logged in: ${user.username}"))
+      } yield resp)
         .getOrElseF(
           Forbidden("invalid user").removeCookie(conf.cookieName)
-      )
+        )
 
     def sessionInfo(ctx: Context): IO[Response[IO]] =
       Ok(toSessionInfo(ctx).asJson)
@@ -230,7 +228,7 @@ object AuthServer extends Http4sDsl[IO] {
       for {
         _    <- sessionStore.endSession(ctx.session)
         resp <- Ok("Goodbye.").removeCookie(conf.cookieName)
-        _ <- IO(logger.debug(s"Logged in: ${ctx.user.username}"))
+        _    <- IO(logger.debug(s"Logged in: ${ctx.user.username}"))
       } yield resp
 
     def logoutUser(ctx: Context, req: AuthedRequest[IO, _]): IO[Response[IO]] =
@@ -239,7 +237,7 @@ object AuthServer extends Http4sDsl[IO] {
         user     <- userStore.get(username.username).filter(_.role != Role.StaffUser)
         _        <- lo(sessionStore.endAllSessions(user))
         resp     <- lo(Ok(s"Logged out user ${user.username}"))
-        _ <- OptionT.pure[IO](logger.debug(s"Forced logout: ${user.username} by ${ctx.user.username}"))
+        _        <- OptionT.pure[IO](logger.debug(s"Forced logout: ${user.username} by ${ctx.user.username}"))
       } yield resp)
         .getOrElseF(Forbidden("Not allowed"))
 
@@ -248,7 +246,7 @@ object AuthServer extends Http4sDsl[IO] {
         username <- lo(req.req.as[JustUsername])
         user     <- userStore.get(username.username).filter(_.role != Role.StaffUser)
         resp     <- lo(doLogin(user))
-        _ <- OptionT.pure[IO](logger.debug(s"Escalate: ${user.username} by ${ctx.user.username}"))
+        _        <- OptionT.pure[IO](logger.debug(s"Escalate: ${user.username} by ${ctx.user.username}"))
       } yield resp)
         .getOrElseF(Forbidden("Not allowed"))
   }

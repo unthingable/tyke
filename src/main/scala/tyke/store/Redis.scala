@@ -16,13 +16,13 @@ import scala.concurrent.duration.FiniteDuration
 
 object Redis {
   implicit private val parseUserSession: Parse[UserSession] = Parse[UserSession](deserialise)
-  implicit private val parseUser: Parse[User] = Parse[User](deserialise[User])
-  implicit private val parseInstant: Parse[Instant] = Parse[Instant](deserialise[Instant])
+  implicit private val parseUser: Parse[User]               = Parse[User](deserialise[User])
+  implicit private val parseInstant: Parse[Instant]         = Parse[Instant](deserialise[Instant])
 
-  implicit val format: Format = Format{
+  implicit val format: Format = Format {
     case x: UserSession => serialise(x)
-    case x: User => serialise(x)
-    case x: Instant => serialise(x)
+    case x: User        => serialise(x)
+    case x: Instant     => serialise(x)
   }
 
   def redisSessionStore(
@@ -31,7 +31,7 @@ object Redis {
     timeout: FiniteDuration
   ): BackingSessionStore[IO, User, UserSession] =
     new BackingSessionStore[IO, User, UserSession] {
-      private def sessionKey(s: UserSession) = s"session:${s.session}"
+      private def sessionKey(s: UserSession)     = s"session:${s.session}"
       private def sessionTimeKey(s: UserSession) = sessionKey(s) + ":time"
 
       def endAllSessions(user: User): IO[Unit] =
@@ -79,7 +79,6 @@ object Redis {
           _ <- OptionT.pure[IO](client.expire(user, timeout.toSeconds.toInt)) // expire user set itself
         } yield session
 
-
       def userSessions(user: User): OptionT[IO, Set[UserSession]] =
         OptionT.fromOption[IO](client.smembers[UserSession](user)).map(_.map(_.get))
 
@@ -88,20 +87,20 @@ object Redis {
 
       def sessionTimestamp(session: UserSession): OptionT[IO, Instant] =
         OptionT.fromOption[IO](client.get[Instant](sessionKey(session) + ":time"))
-}
+    }
 
   def redisClient(conf: RedisBackend): IO[RedisClient] = IO(new RedisClient(conf.host, conf.port, conf.database))
 
   private def serialise(value: Any): Array[Byte] = {
     val stream: ByteArrayOutputStream = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(stream)
+    val oos                           = new ObjectOutputStream(stream)
     oos.writeObject(value)
     oos.close()
     stream.toByteArray
   }
 
   private def deserialise[A](bytes: Array[Byte]): A = {
-    val ois = new ObjectInputStream(new ByteArrayInputStream(bytes))
+    val ois   = new ObjectInputStream(new ByteArrayInputStream(bytes))
     val value = ois.readObject
     ois.close()
     value.asInstanceOf[A]

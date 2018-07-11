@@ -17,11 +17,11 @@ object Helpers {
   // noinspection ScalaDocMissingParameterDescription
   case class MicroClient(defaultService: HttpService[IO]) {
     val cookieJar: mutable.HashMap[String, Cookie] = mutable.HashMap.empty
-    private val logger = LoggerFactory.getLogger("MicroClient")
+    private val logger                             = LoggerFactory.getLogger("MicroClient")
 
     def fetch(req: IO[Request[IO]], service: HttpService[IO] = defaultService): Response[IO] = {
       val reqWithCookies = cookieJar.values.foldRight(req)((cookie, req) => req.map(_.addCookie(cookie)))
-      val result = reqWithCookies.flatMap(service.orNotFound(_)).unsafeRunSync()
+      val result         = reqWithCookies.flatMap(service.orNotFound(_)).unsafeRunSync()
 
       logger.debug(result.as[String].unsafeRunSync())
 

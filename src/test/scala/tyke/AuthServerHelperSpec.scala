@@ -13,8 +13,8 @@ class AuthServerHelperSpec extends org.specs2.mutable.Specification {
 
   import store._
 
-  val user1 = 1
-  val user2 = 2
+  val user1                                              = 1
+  val user2                                              = 2
   val sessionStore: BackingSessionStore[Id, Int, String] = Dummy.dummySessionStore(identity)
 
   "dummySessionStore" >> {
