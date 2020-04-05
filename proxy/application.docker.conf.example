@@ -1,0 +1,7 @@
+backend = {
+  backend-user = ["default"]
+  backend-session = "redis"
+  session-timeout = 1800
+
+  backends.redis.host = "redis"
+}

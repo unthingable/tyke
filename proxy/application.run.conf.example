@@ -1,0 +1,6 @@
+backend = {
+  backend-user = ["default"]
+  session-timeout = 1800
+}
+
+server.secret = "set your secret to something unique"

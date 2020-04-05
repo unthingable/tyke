@@ -1,0 +1,138 @@
+buildscript {
+    repositories { jcenter() }
+    dependencies {
+        classpath 'com.bmuschko:gradle-docker-plugin:3.4.3'
+    }
+}
+
+plugins {
+    id 'scala'
+    id 'application'
+}
+
+apply plugin: 'com.bmuschko.docker-java-application'
+
+version '1.4-SNAPSHOT'
+
+sourceCompatibility = 1.8
+
+mainClassName = "tyke.AuthApp"
+
+repositories {
+    jcenter()
+}
+
+group = "web"
+
+ext {
+    scalaVersion = "2.12"
+    scalaPatch = "4"
+
+    http4sVersion = "0.18.14"
+    specs2Version = "4.3.1"
+    logbackVersion = "1.2.3"
+    circeVersion = "0.9.3"
+    enumeratumVersion = "1.5.13"
+    doobieVersion = "0.5.3"
+}
+
+dependencies {
+
+    compile "org.scala-lang:scala-library:$scalaVersion.$scalaPatch"
+
+    compile "org.http4s:http4s-blaze-server_$scalaVersion:$http4sVersion",
+            "org.http4s:http4s-blaze-client_$scalaVersion:$http4sVersion",
+            "org.http4s:http4s-circe_$scalaVersion:$http4sVersion",
+            "org.http4s:http4s-dsl_$scalaVersion:$http4sVersion",
+            "org.specs2:specs2-core_$scalaVersion:$specs2Version",
+            "org.specs2:specs2-junit_$scalaVersion:$specs2Version",
+            "ch.qos.logback:logback-classic:$logbackVersion",
+            "io.circe:circe-core_$scalaVersion:$circeVersion",
+            "io.circe:circe-generic_$scalaVersion:$circeVersion",
+            "io.circe:circe-parser_$scalaVersion:$circeVersion",
+            "com.github.pureconfig:pureconfig_$scalaVersion:0.9.1",
+            "com.github.pureconfig:pureconfig-cats_$scalaVersion:0.9.1",
+            "com.beachape:enumeratum_$scalaVersion:$enumeratumVersion",
+            "org.tpolecat:doobie-core_$scalaVersion:$doobieVersion",
+            "org.tpolecat:doobie-h2_$scalaVersion:$doobieVersion", // H2 driver 1.4.197 + type mappings.
+            "org.tpolecat:doobie-hikari_$scalaVersion:$doobieVersion", // HikariCP transactor.
+            "org.tpolecat:doobie-specs2_$scalaVersion:$doobieVersion",
+            "mysql:mysql-connector-java:5.1.38",
+            "io.github.nremond:pbkdf2-scala_$scalaVersion:0.6.3",
+            "com.roundeights:hasher_$scalaVersion:1.2.0",
+            "net.debasishg:redisclient_$scalaVersion:3.7",
+            "org.reactormonk:cryptobits_$scalaVersion:1.1"
+
+    testCompile 'junit:junit:4.12',
+                "org.scalatest:scalatest_$scalaVersion:3.0.5",
+                "org.specs2:specs2-core_$scalaVersion:$specs2Version"
+
+    testRuntime "org.scala-lang.modules:scala-xml_$scalaVersion:1.0.6"
+}
+
+compileScala {
+    scalaCompileOptions.additionalParameters = ["-Ypartial-unification"]
+}
+
+tasks.withType(ScalaCompile) {
+    configure(scalaCompileOptions.forkOptions) {
+        jvmArgs += ['-Xss4m']  // to avoid stack overflows with Shapeless
+    }
+}
+
+run {
+    jvmArgs += ['-Djavax.net.ssl.trustStore=src/main/resources/cacerts',
+                '-Dconfig.file=proxy/application.run.conf']
+}
+
+applicationDistribution.from(file('src/main/resources')) {
+    into "etc"
+}
+
+dockerDistTar {
+    environmentVariable('JAVA_OPTS',
+            """-Djavax.net.ssl.trustStore=/${rootProject.name}/etc/cacerts
+             | -Dconfig.file=/${rootProject.name}/etc/application.conf""".stripMargin())
+}
+
+def tykeTag = (project.hasProperty("tykeTag")) ? project.tykeTag : "mydocker/$group/tyke:$version"
+
+docker {
+    javaApplication {
+        maintainer = 'alexk'
+        ports = [9000]
+        tag = tykeTag
+    }
+}
+
+// Fancy test output: https://stackoverflow.com/questions/3963708/gradle-how-to-display-test-results-in-the-console-in-real-time
+
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+import org.gradle.api.tasks.testing.logging.TestLogEvent
+
+tasks.withType(Test) {
+    testLogging {
+        // set options for log level LIFECYCLE
+        events TestLogEvent.FAILED,
+               TestLogEvent.PASSED,
+               TestLogEvent.SKIPPED,
+               TestLogEvent.STANDARD_OUT
+        exceptionFormat TestExceptionFormat.FULL
+        showExceptions true
+        showCauses true
+        showStackTraces true
+
+        // set options for log level DEBUG and INFO
+        debug {
+            events TestLogEvent.STARTED,
+                   TestLogEvent.FAILED,
+                   TestLogEvent.PASSED,
+                   TestLogEvent.SKIPPED,
+                   TestLogEvent.STANDARD_ERROR,
+                   TestLogEvent.STANDARD_OUT
+            exceptionFormat TestExceptionFormat.FULL
+        }
+        info.events = debug.events
+        info.exceptionFormat = debug.exceptionFormat
+    }
+}
